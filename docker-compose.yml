@@ -1,0 +1,156 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TradeSphere — Infrastructure
+# Start: docker-compose up -d
+# Stop:  docker-compose down
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: tradesphere-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tradesphere
+      POSTGRES_PASSWORD: tradesphere
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tradesphere"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: tradesphere-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: tradesphere-zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: tradesphere-kafka
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+
+      # ── Listener explanation ───────────────────────────────────────────────
+      # Two listeners, two audiences:
+      #
+      # EXTERNAL://localhost:9092
+      #   → For Spring Boot services running on the HOST machine (mvn spring-boot:run)
+      #   → Docker maps port 9092 to the host, so localhost:9092 reaches Kafka
+      #   → This is the correct bootstrap-servers value in all application.yml files
+      #
+      # INTERNAL://kafka:29092
+      #   → For containers inside the Docker network (Kafka UI, future service containers)
+      #   → Docker internal DNS resolves "kafka" to this container
+      #   → If you ever Dockerize the Spring Boot services, switch bootstrap-servers to kafka:29092
+      #
+      # Common mistake: using only localhost:9092 as advertised listener
+      # breaks Kafka UI and any future containerized services.
+      # Common mistake: using only kafka:29092 as advertised listener
+      # breaks host-running Spring Boot services.
+      # Both listeners are required for this hybrid dev model.
+      # ──────────────────────────────────────────────────────────────────────
+      KAFKA_LISTENERS: EXTERNAL://0.0.0.0:9092,INTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: EXTERNAL://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: EXTERNAL:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # Pre-create topics with 3 partitions (partitioned by userId for ordering guarantee)
+      KAFKA_CREATE_TOPICS: "order.executed:3:1,order.cancelled:3:1,order.rejected:3:1"
+
+      # Reduce log noise in dev
+      KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
+    ports:
+      - "9092:9092"   # host services connect here
+      # 29092 is internal only — not exposed to host
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: tradesphere-kafka-ui
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_CLUSTERS_0_NAME: tradesphere-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    ports:
+      - "9093:8080"
+
+  mongodb:
+    image: mongo:7.0.12
+    container_name: tradesphere-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: tradesphere
+      MONGO_INITDB_ROOT_PASSWORD: tradesphere
+      MONGO_INITDB_DATABASE: tradesphere_notifications
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: tradesphere-redis-commander
+    restart: unless-stopped
+    depends_on:
+      - redis
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8089:8081"
+
+volumes:
+  postgres_data:
+  redis_data:
+  kafka_data:
+  zookeeper_data:
+  zookeeper_log:
+  mongodb_data:
