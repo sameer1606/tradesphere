@@ -2,7 +2,6 @@ package com.tradesphere.order;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.cloud.openfeign.EnableFeignClients;
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -28,7 +27,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * MIS auto square-off: @Scheduled cron "0 20 15 * * MON-FRI"
  */
 @SpringBootApplication
-@EnableFeignClients
 @EnableKafka
 @EnableAsync
 @EnableScheduling
