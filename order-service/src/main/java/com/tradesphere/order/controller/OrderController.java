@@ -2,6 +2,7 @@ package com.tradesphere.order.controller;
 
 import com.tradesphere.order.dto.PlaceOrderRequest;
 import com.tradesphere.order.service.OrderService;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,7 @@ import java.util.UUID;
 public class OrderController {
     private final OrderService orderService;
 
+    @Operation(summary = "Place a new order", description = "Creates and executes a market or limit order")
     @PostMapping("/place")
     public ResponseEntity placeOrder(@Valid @RequestBody PlaceOrderRequest request){
         orderService.placeOrder(request);
