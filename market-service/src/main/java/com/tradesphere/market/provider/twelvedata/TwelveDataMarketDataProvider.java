@@ -4,10 +4,8 @@ import com.tradesphere.market.domain.OhlcCandle;
 import com.tradesphere.market.dto.twelvedata.TwelveDataCandleResponse;
 import com.tradesphere.market.exception.MarketDataException;
 import com.tradesphere.market.provider.CandleDataProvider;
-import org.apache.kafka.common.errors.ApiException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -15,7 +13,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -48,6 +45,7 @@ public class TwelveDataMarketDataProvider implements CandleDataProvider {
         return twelveDataCandleResponse.values()
                 .stream()
                 .map(candle -> new OhlcCandle(
+                        null,
                         twelveDataCandleResponse.meta().symbol(),     // from meta
                         twelveDataCandleResponse.meta().exchange(),   // from meta
                         twelveDataCandleResponse.meta().interval(),   // from meta
